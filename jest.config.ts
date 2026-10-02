@@ -14,8 +14,18 @@ const config: Config = {
   moduleFileExtensions: ['js', 'json', 'ts'],
   rootDir: '.',
   testRegex: '.*\\.spec\\.ts$',
+  setupFiles: ['<rootDir>/test/setup-env.ts'],
+  // Nest 12 and jose ship ESM only, so tests run as native ESM (see the
+  // --experimental-vm-modules flag in the npm scripts).
+  extensionsToTreatAsEsm: ['.ts'],
   transform: {
-    '^.+\\.(t|j)s$': 'ts-jest',
+    '^.+\\.ts$': [
+      'ts-jest',
+      {
+        useESM: true,
+        tsconfig: { module: 'esnext', moduleResolution: 'bundler' },
+      },
+    ],
   },
   moduleNameMapper: pathsToModuleNameMapper(paths, { prefix: '<rootDir>/' }),
   collectCoverageFrom: [

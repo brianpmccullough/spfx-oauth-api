@@ -34,7 +34,7 @@ npm run test:cov       # coverage -> coverage/
 - `strict: true`, with `strictPropertyInitialization: false` (so Nest's injected/decorated properties don't need initializers).
 - **oxlint**, not ESLint. `no-floating-promises` and `no-explicit-any` are both **errors** — await/void/catch every promise, type everything. For a genuine one-off, override inline with `// oxlint-disable-next-line <rule>` plus a reason, not a config change.
 - **Prettier**: single quotes, trailing commas everywhere, imports auto-organized via `prettier-plugin-organize-imports` — don't hand-order imports, `npm run format` fixes them.
-- Jest runs under `node --experimental-vm-modules` (see the `test*` scripts). Invoke tests through the npm scripts rather than a bare `jest` — a direct call drops that flag and ESM-resolving tests fail confusingly.
+- Jest runs tests as native ESM (`node --experimental-vm-modules` in the `test*` scripts, plus ts-jest `useESM` in both configs) because Nest 12 and `jose` ship ESM only. Invoke tests through the npm scripts rather than a bare `jest` — a direct call drops that flag and ESM-resolving tests fail confusingly.
 
 ### Two Jest configs, one gotcha
 
@@ -42,11 +42,17 @@ npm run test:cov       # coverage -> coverage/
 
 `test/jest-e2e.json` does **not** do this. If you add a path alias and use it from an e2e test, resolution will fail. Either port the alias mapping into the e2e config or convert it to a `.ts` config that shares the same logic.
 
+Anything else shared between the two configs must also be changed in both: the ESM transform, and `setupFiles: test/setup-env.ts`, which sets test values for the required env vars before `AppModule` loads (so tests never read a developer's `.env`).
+
 ## Architecture rules
 
 Full rationale and the auth-flow/token-custody design: [`docs/architecture.md`](docs/architecture.md). Read that before building auth, token, or vendor-integration code.
 
 - One Nest module per bounded concern (`auth/`, `vendors/<vendor>/`, `tokens/`, `config/`). Controllers stay thin — no HTTP calls, token handling, or vendor knowledge in a controller.
+- Every route requires a valid Entra ID bearer token by default (global `EntraAuthGuard` in `auth/`). Opt a route or controller out with `@Unauthenticated()`. Read the caller with `@CurrentUser()`, which yields the `AuthenticatedUser` domain object (including the validated access token, for future OBO) — pass that to services rather than re-reading the request.
+- Configuration is two-tier, and only `config/` and a vendor's own config file read the environment — never `process.env` elsewhere:
+  - **Core and cross-cutting** (port, CORS, Entra IDs and future shared secrets) go in `config/environment-variables.schema.ts` (class-validator, validated by `ConfigModule.forRoot`) and are read through `ConfigurationService.settings`. Required vars are listed in `.env.example`.
+  - **Vendor-specific** variables belong to the vendor module: its own schema class validated with the shared `validateConfig` helper, exposed as a typed provider. Don't add them to the global schema.
 - Vendor tokens are persisted behind a `TokenStore` port (in-memory adapter for now); don't reach for a concrete store directly from vendor or controller code.
 - A missing or expired vendor connection is a normal, expected state, not a crash — return something the client can act on, not a 500.
 
