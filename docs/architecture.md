@@ -28,7 +28,7 @@ Vendors sit behind a common interface so adding the second vendor requires no ch
 
 ## Two distinct auth flows — don't conflate them
 
-**Inbound (SPFx → this API):** the client uses SPFx `AadHttpClient` to acquire an Entra ID access token scoped to this API's app registration. This API validates the token on every request: signature against the tenant's JWKS, plus `iss`, `aud`, and expiry. Derive the user principal from token claims (prefer the immutable `oid`, not `upn` or `email`) and expose it via a guard + request-scoped principal. Identity comes from the validated token only — never from a request body, query string, or custom header.
+**Inbound (SPFx → this API):** the client uses SPFx `AadHttpClient` to acquire an Entra ID access token scoped to this API's app registration. This API validates the token on every request: signature against the tenant's JWKS, plus `iss`, `aud`, and expiry. Derive the user principal from token claims (prefer the immutable `oid`, not `upn` or `email`) and expose it via a guard + request-scoped principal (implemented as the global `EntraAuthGuard`, which attaches an `AuthenticatedUser` read with `@CurrentUser()`). Identity comes from the validated token only — never from a request body, query string, or custom header.
 
 **Outbound (this API → vendor):** a standard OAuth 2.0 authorization-code flow against the vendor, keyed to the inbound Entra principal. The vendor's `client_secret` lives only in server configuration. Use PKCE where the vendor supports it, treat the `state` parameter as a CSRF defense that must be generated, stored, and verified server-side, and validate the redirect URI against an allowlist.
 
